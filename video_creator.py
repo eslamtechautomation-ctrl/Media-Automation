@@ -29,26 +29,32 @@ def save_memory(trend):
     with open(DB_FILE, "w") as f: json.dump(memory, f)
 
 def get_google_trend():
+    # المحاولة الأولى: باستخدام pytrends
     try:
-        # استخدام pytrends بدلاً من الروابط المتعطلة
+        from pytrends.request import TrendReq
         pytrends = TrendReq(hl='en-US', tz=360)
         df = pytrends.trending_searches(pn='united_states')
         memory = load_memory()
-        for trend_name in df[0]:
-            if trend_name not in memory:
-                return trend_name
-        return None
+        if not df.empty:
+            for trend_name in df[0]:
+                if trend_name not in memory:
+                    return trend_name
     except Exception as e:
-        print(f"Trend Error: {e}")
-        return None
+        print(f"Pytrends fallback: {e}")
 
-def get_deep_tech_script(trend_topic):
-    prompt = f"Write a viral 25-second educational English script for a tech reel about: {trend_topic}. Hook + Deep Fact + CTA. Return ONLY the script."
-    chat_completion = client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
-        model="llama-3.3-70b-versatile",
-    )
-    return chat_completion.choices[0].message.content
+    # المحاولة الثانية (الخطة البديلة): لو الأولى فشلت، يسحب من RSS تريندات العالم
+    try:
+        import feedparser
+        # رابط بديل ومستقر لتريندات جوجل
+        feed = feedparser.parse("https://trends.google.com/trends/trendingsearches/daily/rss?geo=US")
+        memory = load_memory()
+        for entry in feed.entries:
+            if entry.title not in memory:
+                return entry.title
+    except:
+        pass
+        
+    return None
 
 def download_bg_video(query):
     url = f"https://api.pexels.com/videos/search?query={query.replace(' ','%20')}%20tech&per_page=5"
