@@ -21,15 +21,19 @@ def get_latest_news():
     return None, None
 
 def post_image_to_fb(title, news_link):
-    # بنعمل Prompt للصورة بناءً على العنوان
-    image_prompt = f"Futuristic technology, {title}, high resolution, cyberpunk style, digital art"
-    # رابط توليد الصورة (مجاني وبدون مفاتيح)
-    image_url = f"https://pollinations.ai/p/{image_prompt.replace(' ', '%20')}?width=1080&height=1080&seed=42&nologo=true"
+    # تحسين الـ Prompt عشان الصورة تطلع احترافية أكتر
+    clean_title = title.replace("'", "").replace('"', "")
+    image_prompt = f"futuristic tech style, concept art, {clean_title}"
+    
+    # إضافة &ext=.jpg في الآخر عشان فيسبوك يقبل الرابط
+    image_url = f"https://pollinations.ai/p/{image_prompt.replace(' ', '%20')}?width=1080&height=1080&seed={int(time.time())}&nologo=true&ext=.jpg"
+    
+    print(f"Generated Image URL: {image_url}")
     
     fb_url = f"https://graph.facebook.com/v20.0/{FB_PAGE_ID}/photos"
     payload = {
         'url': image_url,
-        'caption': f"🔥 {title}\n\nRead more: {news_link}\n\n#TrendTech #Innovation #TechNews",
+        'caption': f"🔥 {title}\n\nRead more: {news_link}\n\n#TrendTech #Innovation #AI",
         'access_token': FB_PAGE_ACCESS_TOKEN
     }
     
