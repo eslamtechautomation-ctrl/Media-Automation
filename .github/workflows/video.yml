@@ -29,7 +29,7 @@ jobs:
 
       - name: Install Python Libraries
         run: |
-          pip install requests feedparser groq gTTS
+          pip install requests feedparser groq gTTS pytrends
           pip install "Pillow<10.0.0"
           pip install moviepy==1.0.3
 
