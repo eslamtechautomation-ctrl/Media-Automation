@@ -46,51 +46,44 @@ def get_story_script():
     )
     return selected_topic, chat_completion.choices[0].message.content
 
-def download_visuals():
-    # Dramatic search queries for cinematic background
-    queries = ["cyberpunk city", "dark server room", "vintage computer", "artificial intelligence blue", "glitch effect"]
-    query = random.choice(queries)
-    url = f"https://api.pexels.com/videos/search?query={query}&per_page=5"
+def download_multi_visuals(query):
+    # تحميل 4 فيديوهات مختلفة لتنويع المشاهد
     headers = {"Authorization": PEXELS_API_KEY}
+    url = f"https://api.pexels.com/videos/search?query={query}&per_page=10"
+    res = requests.get(url, headers=headers).json()
     
-    try:
-        res = requests.get(url, headers=headers).json()
-        video_url = random.choice(res['videos'])['video_files'][0]['link']
-        with open("story_bg.mp4", 'wb') as f:
-            f.write(requests.get(video_url).content)
-    except:
-        # Emergency fallback video
-        fallback = "https://videos.pexels.com/video-files/3129957/3129957-uhd_2560_1440_25fps.mp4"
-        with open("story_bg.mp4", 'wb') as f:
-            f.write(requests.get(fallback).content)
+    video_files = []
+    for i in range(4): # هناخد أول 4 فيديوهات مختلفة
+        v_url = res['videos'][i]['video_files'][0]['link']
+        filename = f"part_{i}.mp4"
+        with open(filename, 'wb') as f:
+            f.write(requests.get(v_url).content)
+        video_files.append(filename)
+    return video_files
 
-def assemble_reel(script, topic_title):
-    # 1. Voice Generation (English)
+def assemble_pro_reel(script, topic_title, video_parts):
+    # 1. الصوت
     tts = gTTS(text=script, lang='en')
     tts.save("voice.mp3")
-    
-    # 2. Video Processing
-    video = VideoFileClip("story_bg.mp4").subclip(0, 28).resize(width=1080)
     audio = AudioFileClip("voice.mp3")
     
-    # 3. Dynamic Title Overlay
-    title_overlay = TextClip(
-        topic_title.upper(), 
-        fontsize=70, 
-        color='yellow', 
-        font='Arial-Bold', 
-        method='caption', 
-        size=(900, None)
-    ).set_position('center').set_duration(6).crossfadeout(1)
+    # 2. تجميع المشاهد (تغيير المشهد كل 6-7 ثواني)
+    clips = []
+    for part in video_parts:
+        clip = VideoFileClip(part).subclip(0, 7).resize(height=1920).crop(x_center=540, width=1080)
+        clips.append(clip)
     
-    # 4. Branding (Watermark)
-    brand = TextClip("TECH MYSTERIES", fontsize=45, color='white', font='Arial-Bold')
-    brand = brand.set_position(('center', 1750)).set_duration(28).set_opacity(0.4)
+    main_video = concatenate_videoclips(clips).set_duration(audio.duration)
     
-    # Final Combine
-    final = CompositeVideoClip([video, title_overlay, brand]).set_audio(audio)
-    final.write_videofile("final_story.mp4", fps=24, codec="libx264", audio_codec="aac")
+    # 3. إضافة العنوان بخلفية احترافية
+    title_clip = TextClip(topic_title.upper(), fontsize=70, color='yellow', font='Arial-Bold', 
+                          bg_color='black', method='caption', size=(900, None))
+    title_clip = title_clip.set_position('center').set_duration(5).set_opacity(0.8)
 
+    # 4. دمج الكل مع الموسيقى (لو عندك ملف music.mp3 في الـ Repo)
+    final = main_video.set_audio(audio)
+    final.write_videofile("final_reel.mp4", fps=24, codec="libx264")
+    
 def post_to_facebook(title):
     url = f"https://graph.facebook.com/v20.0/{FB_PAGE_ID}/videos"
     with open('final_story.mp4', 'rb') as f:
