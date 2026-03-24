@@ -1,12 +1,9 @@
-import os
-import requests
-import json
-import random
+import os, requests, json, random
 from groq import Groq
 from gtts import gTTS
-from moviepy.editor import VideoFileClip, AudioFileClip, TextClip, CompositeVideoClip, concatenate_videoclips
+from moviepy.editor import VideoFileClip, AudioFileClip, TextClip, CompositeVideoClip, concatenate_videoclips, CompositeAudioClip
 
-# الإعدادات من GitHub Secrets
+# الإعدادات
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 FB_PAGE_ID = os.environ.get("FB_PAGE_ID")
@@ -15,121 +12,82 @@ FB_PAGE_ACCESS_TOKEN = os.environ.get("FB_PAGE_ACCESS_TOKEN")
 client = Groq(api_key=GROQ_API_KEY)
 
 def get_dynamic_story():
-    """توليد فكرة قصة وسيناريو بشكل آلي تماماً"""
     prompt = """
-    Think of a mysterious or shocking true story from tech history (e.g., Apple, Bitcoin, Hacking, SpaceTech).
-    Write a 28-second viral storytelling script for a Facebook Reel.
-    Must include: A mind-blowing hook, 3 punchy facts, and a dramatic ending.
-    Language: English.
+    Think of a mysterious or shocking true story from tech history.
+    Write a 28-second viral storytelling script for a Reel.
     Return ONLY a JSON format: {"title": "Short Title", "script": "Full Script Content"}
     """
-    try:
-        res = client.chat.completions.create(
-            messages=[{"role": "user", "content": prompt}],
-            model="llama-3.3-70b-versatile",
-            response_format={"type": "json_object"}
-        )
-        data = json.loads(res.choices[0].message.content)
-        return data['title'], data['script']
-    except Exception as e:
-        print(f"Error generating story: {e}")
-        return "Tech Secrets", "Did you know that the first computer bug was actually a real moth found inside a machine?"
+    res = client.chat.completions.create(
+        messages=[{"role": "user", "content": prompt}],
+        model="llama-3.3-70b-versatile",
+        response_format={"type": "json_object"}
+    )
+    data = json.loads(res.choices[0].message.content)
+    return data['title'], data['script']
+
+def download_music():
+    """تحميل موسيقى خلفية مجانية إذا لم تكن موجودة"""
+    music_path = "suspense.mp3"
+    if not os.path.exists(music_path):
+        print("📥 Downloading background music...")
+        # رابط لموسيقى تشويق مجانية (No Copyright)
+        url = "https://www.bensound.com/bensound-music/bensound-creepy.mp3" 
+        try:
+            r = requests.get(url)
+            with open(music_path, 'wb') as f:
+                f.write(r.content)
+        except:
+            return None
+    return music_path
 
 def download_multi_visuals(topic):
-    """تحميل 4 مقاطع فيديو مختلفة لضمان شروط الربح"""
     headers = {"Authorization": PEXELS_API_KEY}
-    search_query = f"{topic} technology dark cinematic"
-    url = f"https://api.pexels.com/videos/search?query={search_query.replace(' ','%20')}&per_page=10"
-    
-    try:
-        res = requests.get(url, headers=headers).json()
-        video_files = []
-        # تحميل 4 مقاطع مختلفة لزيادة قيمة المونتاج
-        for i in range(min(4, len(res['videos']))):
-            v_url = res['videos'][i]['video_files'][0]['link']
-            filename = f"part_{i}.mp4"
-            with open(filename, 'wb') as f:
-                f.write(requests.get(v_url).content)
-            video_files.append(filename)
-        return video_files
-    except Exception as e:
-        print(f"Error downloading visuals: {e}")
-        return []
+    url = f"https://api.pexels.com/videos/search?query={topic.replace(' ','%20')}%20tech&per_page=5"
+    res = requests.get(url, headers=headers).json()
+    files = []
+    for i in range(min(4, len(res.get('videos', [])))):
+        v_url = res['videos'][i]['video_files'][0]['link']
+        path = f"part_{i}.mp4"
+        with open(path, 'wb') as f: f.write(requests.get(v_url).content)
+        files.append(path)
+    return files
 
-def create_pro_reel(title, script, video_files):
-    """مونتاج احترافي بمشاهد متعددة وعناوين واضحة"""
-    # 1. توليد الصوت
+def create_pro_reel(title, script, video_parts):
+    # 1. صوت المعلق
     tts = gTTS(text=script, lang='en')
     tts.save("voice.mp3")
-    audio = AudioFileClip("voice.mp3")
+    voice = AudioFileClip("voice.mp3")
     
-    # 2. معالجة المشاهد (تغيير المشهد كل 7 ثواني تقريباً)
-    clips = []
-    for file in video_files:
-        if os.path.exists(file):
-            # ضبط المقاس ليكون Reels (9:16)
-            clip = VideoFileClip(file).subclip(0, 7).resize(height=1920).crop(x_center=540, width=1080)
-            clips.append(clip)
+    # 2. دمج الموسيقى
+    music_file = download_music()
+    if music_file:
+        bg_music = AudioFileClip(music_file).volumex(0.15).set_duration(voice.duration)
+        final_audio = CompositeAudioClip([voice, bg_music])
+    else:
+        final_audio = voice
+
+    # 3. المونتاج (تغيير المشاهد)
+    clips = [VideoFileClip(p).subclip(0, 7).resize(height=1920).crop(x_center=540, width=1080) for p in video_parts if os.path.exists(p)]
+    main_video = concatenate_videoclips(clips).set_duration(voice.duration)
     
-    if not clips: return False
+    # 4. العنوان
+    txt = TextClip(title.upper(), fontsize=70, color='yellow', font='Arial-Bold', bg_color='black', method='caption', size=(900, None))
+    txt = txt.set_position('center').set_duration(6).set_opacity(0.85)
     
-    main_video = concatenate_videoclips(clips).set_duration(audio.duration)
-    
-    # 3. إضافة النصوص (العنوان في المنتصف بخلفية سوداء)
-    title_overlay = TextClip(
-        title.upper(), 
-        fontsize=70, 
-        color='yellow', 
-        font='Arial-Bold', 
-        method='caption', 
-        size=(900, None),
-        bg_color='black'
-    ).set_position('center').set_duration(6).set_opacity(0.85).crossfadeout(1)
-    
-    # 4. العلامة المائية في الأسفل
-    brand = TextClip("TECH MYSTERIES", fontsize=40, color='white', font='Arial-Bold')
-    brand = brand.set_position(('center', 1700)).set_duration(audio.duration).set_opacity(0.4)
-    
-    # دمج الصوت والصورة
-    final = CompositeVideoClip([main_video, title_overlay, brand]).set_audio(audio)
+    final = CompositeVideoClip([main_video, txt]).set_audio(final_audio)
     final.write_videofile("final_reel.mp4", fps=24, codec="libx264", audio_codec="aac")
-    return True
 
 def upload_to_facebook(title):
-    """رفع الفيديو النهائي لصفحة فيسبوك"""
     url = f"https://graph.facebook.com/v20.0/{FB_PAGE_ID}/videos"
-    try:
-        with open('final_reel.mp4', 'rb') as f:
-            payload = {
-                'description': f"🕵️‍♂️ Tech Mystery: {title}\n\n#Storytelling #TechHistory #Innovation #AI #TechSecrets",
-                'access_token': FB_PAGE_ACCESS_TOKEN
-            }
-            res = requests.post(url, data=payload, files={'source': f}).json()
-            return res
-    except Exception as e:
-        return {"error": str(e)}
+    with open('final_reel.mp4', 'rb') as f:
+        payload = {'description': f"🎬 {title} #TechMysteries #AI #Stories", 'access_token': FB_PAGE_ACCESS_TOKEN}
+        return requests.post(url, data=payload, files={'source': f}).json()
 
 if __name__ == "__main__":
-    print("🎬 Starting AI Story Engine...")
-    
-    # 1. الحصول على القصة
-    story_title, story_script = get_dynamic_story()
-    print(f"📖 Story Topic: {story_title}")
-    
-    # 2. تحميل المشاهد (تجنباً لخطأ الـ Logs السابق)
-    print("📥 Fetching multi-scene visuals...")
-    videos = download_multi_visuals(story_title)
-    
-    if videos:
-        # 3. المونتاج
-        print("✂️ Assembling cinematic reel...")
-        if create_pro_reel(story_title, story_script, videos):
-            # 4. الرفع
-            print("🚀 Uploading to Facebook...")
-            result = upload_to_facebook(story_title)
-            if "id" in result:
-                print(f"✅ Video Published Successfully! ID: {result['id']}")
-            else:
-                print(f"❌ Upload Error: {result}")
-    else:
-        print("❌ Script stopped: No visuals found.")
+    print("🚀 Starting Professional Video Creator...")
+    t, s = get_dynamic_story()
+    v = download_multi_visuals(t)
+    if v:
+        create_pro_reel(t, s, v)
+        res = upload_to_facebook(t)
+        print(f"Done! FB ID: {res.get('id')}")
