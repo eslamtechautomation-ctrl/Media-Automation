@@ -3,7 +3,7 @@ name: Trend Tech Reels Creator
 on:
   schedule:
     - cron: '0 10 * * *' # هيشتغل الساعة 12 ضهراً بتوقيت مصر
-  workflow_dispatch: # للتشغيل اليدوي
+  workflow_dispatch: # زرار التشغيل اليدوي
 
 jobs:
   build:
@@ -21,14 +21,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg imagemagick
-          # تعديل صلاحيات ImageMagick عشان يسمح بكتابة النصوص على الفيديو
+          # خطوة حرجة: السماح لـ ImageMagick باستخدام الخطوط وكتابة النصوص
           sudo sed -i 's/domain="path" rights="none" pattern="@\*"/domain="path" rights="read|write" pattern="@*"/g' /etc/ImageMagick-6/policy.xml
 
       - name: Install Python Libraries
         run: |
-          pip install requests feedparser groq gTTS 
-          # تسطيب إصدار محدد من Pillow لحل مشكلة ANTIALIAS
-          pip install "Pillow<10.0.0" 
+          pip install requests feedparser groq gTTS
+          pip install "Pillow<10.0.0" # لإصلاح مشكلة ANTIALIAS
           pip install moviepy==1.0.3
 
       - name: Create and Upload Reel
