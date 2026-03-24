@@ -26,7 +26,10 @@ jobs:
 
       - name: Install Python Libraries
         run: |
-          pip install requests feedparser groq gTTS moviepy==1.0.3
+          pip install requests feedparser groq gTTS 
+          # تسطيب إصدار محدد من Pillow لحل مشكلة ANTIALIAS
+          pip install "Pillow<10.0.0" 
+          pip install moviepy==1.0.3
 
       - name: Create and Upload Reel
         env:
