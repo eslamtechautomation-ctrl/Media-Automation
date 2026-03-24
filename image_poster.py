@@ -3,11 +3,10 @@ import requests
 import feedparser
 import time
 
-# نفس الـ Secrets اللي استعملناها قبل كدة
+# الإعدادات
 FB_PAGE_ID = os.environ.get("FB_PAGE_ID")
 FB_PAGE_ACCESS_TOKEN = os.environ.get("FB_PAGE_ACCESS_TOKEN")
 
-# مدوناتك
 FEEDS = [
     "https://familytvr.blogspot.com/feeds/posts/default?alt=rss",
     "https://luxuryestateguide.blogspot.com/feeds/posts/default?alt=rss"
@@ -21,28 +20,38 @@ def get_latest_news():
     return None, None
 
 def post_image_to_fb(title, news_link):
-    # تحسين الـ Prompt عشان الصورة تطلع احترافية أكتر
+    # 1. تجهيز رابط الصورة
     clean_title = title.replace("'", "").replace('"', "")
-    image_prompt = f"futuristic tech style, concept art, {clean_title}"
+    image_prompt = f"futuristic technology style, {clean_title}"
+    image_url = f"https://pollinations.ai/p/{image_prompt.replace(' ', '%20')}?width=1080&height=1080&nologo=true"
     
-    # إضافة &ext=.jpg في الآخر عشان فيسبوك يقبل الرابط
-    image_url = f"https://pollinations.ai/p/{image_prompt.replace(' ', '%20')}?width=1080&height=1080&seed={int(time.time())}&nologo=true&ext=.jpg"
-    
-    print(f"Generated Image URL: {image_url}")
-    
+    # 2. تحميل الصورة محلياً في ملف مؤقت
+    print(f"Downloading image from Pollinations...")
+    img_data = requests.get(image_url).content
+    with open('temp_image.jpg', 'wb') as handler:
+        handler.write(img_data)
+
+    # 3. رفع الصورة لفيسبوك كملف (Multi-part upload)
+    print(f"Uploading image to Facebook...")
     fb_url = f"https://graph.facebook.com/v20.0/{FB_PAGE_ID}/photos"
+    
     payload = {
-        'url': image_url,
-        'caption': f"🔥 {title}\n\nRead more: {news_link}\n\n#TrendTech #Innovation #AI",
+        'caption': f"🔥 {title}\n\nRead more: {news_link}\n\n#TrendTech #Innovation #Tech",
         'access_token': FB_PAGE_ACCESS_TOKEN
     }
     
-    response = requests.post(fb_url, data=payload)
+    with open('temp_image.jpg', 'rb') as img_file:
+        files = {'source': img_file}
+        response = requests.post(fb_url, data=payload, files=files)
+    
     return response.json()
 
 if __name__ == "__main__":
     title, link = get_latest_news()
     if title:
-        print(f"Generating image for: {title}")
+        print(f"Processing: {title}")
         result = post_image_to_fb(title, link)
         print(f"Result: {result}")
+        # مسح الملف المؤقت بعد الرفع
+        if os.path.exists('temp_image.jpg'):
+            os.remove('temp_image.jpg')
