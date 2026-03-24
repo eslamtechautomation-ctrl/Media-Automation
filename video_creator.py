@@ -37,8 +37,12 @@ def create_reel(script_text):
     tts.save("voice.mp3")
     
     # 2. تجهيز الفيديو والمونتاج
-    video_clip = VideoFileClip("bg_video.mp4").subclip(0, 15).resize(height=1920)
-    audio_clip = AudioFileClip("voice.mp3")
+# تعديل بسيط لضمان التوافق
+    video_clip = VideoFileClip("bg_video.mp4").subclip(0, 15)
+    
+    # لو الفيديو أصلاً بالعرض، هنخليه بالطول للـ Reels
+    final_clip = video_clip.resize(width=1080) # هيظبط العرض والارتفاع هيتظبط تلقائي
+audio_clip = AudioFileClip("voice.mp3")
     
     final_video = video_clip.set_audio(audio_clip)
     final_video.write_videofile("trend_tech_reel.mp4", fps=24)
