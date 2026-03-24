@@ -1,20 +1,36 @@
 import os
 import requests
 import feedparser
+import json
+import time
 from groq import Groq
 from gtts import gTTS
 from moviepy.editor import VideoFileClip, AudioFileClip, TextClip, CompositeVideoClip
 
-# الإعدادات من الـ Secrets
+# الإعدادات
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 FB_PAGE_ID = os.environ.get("FB_PAGE_ID")
 FB_PAGE_ACCESS_TOKEN = os.environ.get("FB_PAGE_ACCESS_TOKEN")
 
 client = Groq(api_key=GROQ_API_KEY)
+DB_FILE = "posted_reels.json"
 
-def get_video_script(title):
-    prompt = f"Write a very short 15-second tech news summary for: {title}. Keep it simple and engaging for a video script. Return ONLY the text."
+def load_memory():
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, "r") as f:
+            return json.load(f)
+    return []
+
+def save_memory(link):
+    memory = load_memory()
+    memory.append(link)
+    with open(DB_FILE, "w") as f:
+        json.dump(memory, f)
+
+def get_arabic_script(title):
+    # نطلب من جروق تلخيص الخبر بالعربي بأسلوب تريند
+    prompt = f"Translate and summarize this tech news into a catchy 20-second Arabic script for a Reel: {title}. Use professional yet engaging Arabic. Return ONLY the Arabic text."
     chat_completion = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
         model="llama-3.3-70b-versatile",
@@ -22,55 +38,60 @@ def get_video_script(title):
     return chat_completion.choices[0].message.content
 
 def download_bg_video():
-    url = "https://api.pexels.com/videos/search?query=technology&per_page=1"
+    url = "https://api.pexels.com/videos/search?query=technology&per_page=15" # سحبنا 15 فيديو لنختار عشوائي
     headers = {"Authorization": PEXELS_API_KEY}
     res = requests.get(url, headers=headers).json()
-    video_url = res['videos'][0]['video_files'][0]['link']
+    import random
+    video_data = random.choice(res['videos'])
+    video_url = video_data['video_files'][0]['link']
     with open("bg_video.mp4", 'wb') as f:
         f.write(requests.get(video_url).content)
 
-def create_reel(script_text):
-    # 1. توليد الصوت
-    tts = gTTS(text=script_text, lang='en')
+def create_reel(arabic_text):
+    # 1. الصوت (عربي)
+    tts = gTTS(text=arabic_text, lang='ar')
     tts.save("voice.mp3")
     
-    # 2. تجهيز الفيديو
-    video_clip = VideoFileClip("bg_video.mp4").subclip(0, 15).resize(width=1080)
+    # 2. المونتاج (25 ثانية)
+    video_clip = VideoFileClip("bg_video.mp4").subclip(0, 25).resize(width=1080)
     audio_clip = AudioFileClip("voice.mp3")
     
-    # 3. إضافة الشعار (Watermark)
+    # 3. الشعار
     watermark = TextClip("Trend Tech", fontsize=50, color='white', font='Arial-Bold')
-    watermark = watermark.set_pos(('center', 'bottom')).set_duration(15).set_opacity(0.5)
+    watermark = watermark.set_pos(('center', 0.85, 'relative')).set_duration(25).set_opacity(0.6)
     
-    # 4. دمج كل شيء
     final_video = video_clip.set_audio(audio_clip)
     final_video = CompositeVideoClip([final_video, watermark])
-    
     final_video.write_videofile("trend_tech_reel.mp4", fps=24, codec="libx264")
 
-def upload_to_fb_reels():
+def upload_to_fb(title):
     url = f"https://graph.facebook.com/v20.0/{FB_PAGE_ID}/videos"
     files = {'source': open('trend_tech_reel.mp4', 'rb')}
     data = {
-        'description': "Latest Tech Update! 🚀 #TrendTech #AI #Technology",
+        'description': f"{title}\n\n#TrendTech #اخبار_التقنية #ذكاء_اصطناعي",
         'access_token': FB_PAGE_ACCESS_TOKEN
     }
     return requests.post(url, data=data, files=files).json()
 
 if __name__ == "__main__":
-    # سحب خبر من إحدى مدوناتك
-    feed_url = "https://familytvr.blogspot.com/feeds/posts/default?alt=rss"
-    feed = feedparser.parse(feed_url)
+    feed = feedparser.parse("https://familytvr.blogspot.com/feeds/posts/default?alt=rss")
+    memory = load_memory()
     
-    if feed.entries:
-        title = feed.entries[0].title
-        print(f"Processing: {title}")
-        
-        script = get_video_script(title)
+    selected_entry = None
+    for entry in feed.entries:
+        if entry.link not in memory:
+            selected_entry = entry
+            break
+            
+    if selected_entry:
+        print(f"New News Found: {selected_entry.title}")
+        ar_script = get_arabic_script(selected_entry.title)
         download_bg_video()
-        create_reel(script)
+        create_reel(ar_script)
         
-        result = upload_to_fb_reels()
-        print(f"Final Result: {result}")
+        result = upload_to_fb(selected_entry.title)
+        if "id" in result:
+            save_memory(selected_entry.link)
+            print("Successfully Posted!")
     else:
-        print("No news found.")
+        print("Everything is up to date.")
