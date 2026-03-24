@@ -4,106 +4,118 @@ import json
 import random
 from groq import Groq
 from gtts import gTTS
-from pytrends.request import TrendReq
 from moviepy.editor import VideoFileClip, AudioFileClip, TextClip, CompositeVideoClip
 
-# الإعدادات
+# Configuration
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 FB_PAGE_ID = os.environ.get("FB_PAGE_ID")
 FB_PAGE_ACCESS_TOKEN = os.environ.get("FB_PAGE_ACCESS_TOKEN")
 
 client = Groq(api_key=GROQ_API_KEY)
-DB_FILE = "posted_reels.json"
 
-def load_memory():
-    if os.path.exists(DB_FILE):
-        try:
-            with open(DB_FILE, "r") as f: return json.load(f)
-        except: return []
-    return []
+def get_story_script():
+    # Topics for the AI to expand on
+    topics = [
+        "The day the internet almost died in 1988 (Morris Worm)",
+        "The secret room in the Apple headquarters",
+        "How a pizza delivery led to the creation of YouTube",
+        "The billion-dollar mistake: Why Yahoo didn't buy Google",
+        "The mystery of the first ever computer moth bug",
+        "Why the QWERTY keyboard was designed to slow you down",
+        "The man who sold the internet for 1 dollar",
+        "How NASA's computer was hacked by a 15-year-old"
+    ]
+    selected_topic = random.choice(topics)
+    
+    prompt = f"""
+    Topic: {selected_topic}
+    Task: Write a 28-second viral, mysterious, and fast-paced storytelling script for a Facebook Reel.
+    Structure: 
+    1. Mind-blowing Hook (e.g., 'They don't want you to know this...').
+    2. The 'Story' (Brief, punchy facts).
+    3. Dramatic Conclusion + CTA ('Follow for more tech secrets').
+    Tone: Cinematic and energetic.
+    Language: English.
+    Return ONLY the script text, no intro/outro.
+    """
+    
+    chat_completion = client.chat.completions.create(
+        messages=[{"role": "user", "content": prompt}],
+        model="llama-3.3-70b-versatile",
+    )
+    return selected_topic, chat_completion.choices[0].message.content
 
-def save_memory(trend):
-    memory = load_memory()
-    memory.append(trend)
-    with open(DB_FILE, "w") as f: json.dump(memory, f)
-
-def get_google_trend():
-    # المحاولة الأولى: باستخدام pytrends
-    try:
-        from pytrends.request import TrendReq
-        pytrends = TrendReq(hl='en-US', tz=360)
-        df = pytrends.trending_searches(pn='united_states')
-        memory = load_memory()
-        if not df.empty:
-            for trend_name in df[0]:
-                if trend_name not in memory:
-                    return trend_name
-    except Exception as e:
-        print(f"Pytrends fallback: {e}")
-
-    # المحاولة الثانية (الخطة البديلة): لو الأولى فشلت، يسحب من RSS تريندات العالم
-    try:
-        import feedparser
-        # رابط بديل ومستقر لتريندات جوجل
-        feed = feedparser.parse("https://trends.google.com/trends/trendingsearches/daily/rss?geo=US")
-        memory = load_memory()
-        for entry in feed.entries:
-            if entry.title not in memory:
-                return entry.title
-    except:
-        pass
-        
-    return None
-
-def download_bg_video(query):
-    url = f"https://api.pexels.com/videos/search?query={query.replace(' ','%20')}%20tech&per_page=5"
+def download_visuals():
+    # Dramatic search queries for cinematic background
+    queries = ["cyberpunk city", "dark server room", "vintage computer", "artificial intelligence blue", "glitch effect"]
+    query = random.choice(queries)
+    url = f"https://api.pexels.com/videos/search?query={query}&per_page=5"
     headers = {"Authorization": PEXELS_API_KEY}
+    
     try:
         res = requests.get(url, headers=headers).json()
-        video_url = res['videos'][0]['video_files'][0]['link']
-        with open("bg_video.mp4", 'wb') as f: f.write(requests.get(video_url).content)
+        video_url = random.choice(res['videos'])['video_files'][0]['link']
+        with open("story_bg.mp4", 'wb') as f:
+            f.write(requests.get(video_url).content)
     except:
-        # فيديو احتياطي
-        res = requests.get("https://api.pexels.com/videos/search?query=technology&per_page=1", headers=headers).json()
-        video_url = res['videos'][0]['video_files'][0]['link']
-        with open("bg_video.mp4", 'wb') as f: f.write(requests.get(video_url).content)
+        # Emergency fallback video
+        fallback = "https://videos.pexels.com/video-files/3129957/3129957-uhd_2560_1440_25fps.mp4"
+        with open("story_bg.mp4", 'wb') as f:
+            f.write(requests.get(fallback).content)
 
-def create_reel(script_text, trend_title):
-    tts = gTTS(text=script_text, lang='en')
+def assemble_reel(script, topic_title):
+    # 1. Voice Generation (English)
+    tts = gTTS(text=script, lang='en')
     tts.save("voice.mp3")
     
-    video_clip = VideoFileClip("bg_video.mp4").subclip(0, 25).resize(width=1080)
-    audio_clip = AudioFileClip("voice.mp3")
+    # 2. Video Processing
+    video = VideoFileClip("story_bg.mp4").subclip(0, 28).resize(width=1080)
+    audio = AudioFileClip("voice.mp3")
     
-    # عنوان التريند
-    title_clip = TextClip(trend_title.upper(), fontsize=70, color='white', font='Arial-Bold', bg_color='black')
-    title_clip = title_clip.set_position(('center', 150)).set_duration(25).set_opacity(0.8)
+    # 3. Dynamic Title Overlay
+    title_overlay = TextClip(
+        topic_title.upper(), 
+        fontsize=70, 
+        color='yellow', 
+        font='Arial-Bold', 
+        method='caption', 
+        size=(900, None)
+    ).set_position('center').set_duration(6).crossfadeout(1)
     
-    # اللوجو (إحداثيات ثابتة لتجنب ValueError)
-    watermark = TextClip("Trend Tech", fontsize=50, color='white', font='Arial-Bold')
-    watermark = watermark.set_position(('center', 1700)).set_duration(25).set_opacity(0.5)
+    # 4. Branding (Watermark)
+    brand = TextClip("TECH MYSTERIES", fontsize=45, color='white', font='Arial-Bold')
+    brand = brand.set_position(('center', 1750)).set_duration(28).set_opacity(0.4)
     
-    final_video = video_clip.set_audio(audio_clip)
-    final_video = CompositeVideoClip([final_video, title_clip, watermark])
-    final_video.write_videofile("trend_tech_reel.mp4", fps=24, codec="libx264")
+    # Final Combine
+    final = CompositeVideoClip([video, title_overlay, brand]).set_audio(audio)
+    final.write_videofile("final_story.mp4", fps=24, codec="libx264", audio_codec="aac")
 
-def upload_to_fb(title):
+def post_to_facebook(title):
     url = f"https://graph.facebook.com/v20.0/{FB_PAGE_ID}/videos"
-    with open('trend_tech_reel.mp4', 'rb') as f:
-        data = {'description': f"{title} #TrendTech #Tech", 'access_token': FB_PAGE_ACCESS_TOKEN}
-        return requests.post(url, data=data, files={'source': f}).json()
+    with open('final_story.mp4', 'rb') as f:
+        payload = {
+            'description': f"Tech Mystery: {title} 🕵️‍♂️💻 #TechSecrets #Innovation #TechHistory #GlobalTech",
+            'access_token': FB_PAGE_ACCESS_TOKEN
+        }
+        files = {'source': f}
+        return requests.post(url, data=payload, files=files).json()
 
 if __name__ == "__main__":
-    trend = get_google_trend()
-    if trend:
-        print(f"Working on: {trend}")
-        script = get_deep_tech_script(trend)
-        download_bg_video(trend)
-        create_reel(script, trend)
-        result = upload_to_fb(trend)
-        if "id" in result:
-            save_memory(trend)
-            print("Successfully Posted!")
+    print("🎬 Starting Story Engine...")
+    topic, script = get_story_script()
+    print(f"📖 Topic: {topic}")
+    
+    print("🎥 Downloading cinematic background...")
+    download_visuals()
+    
+    print("✂️ Editing Video...")
+    assemble_reel(script, topic)
+    
+    print("🚀 Uploading to Facebook...")
+    result = post_to_facebook(topic)
+    
+    if "id" in result:
+        print(f"✅ Successfully Published! Video ID: {result['id']}")
     else:
-        print("No new trends.")
+        print(f"❌ Upload Failed: {result}")
