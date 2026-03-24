@@ -14,8 +14,7 @@ FB_PAGE_ACCESS_TOKEN = os.environ.get("FB_PAGE_ACCESS_TOKEN")
 client = Groq(api_key=GROQ_API_KEY)
 
 def get_video_script(title):
-    # استخدام Groq لعمل SEO وسيناريو قصير
-    prompt = f"Write a 15-second viral video script for this tech news: {title}. Keep it punchy and professional. Return only the script text."
+    prompt = f"Write a very short 15-second tech news summary for: {title}. Keep it simple and engaging for a video script. Return ONLY the text."
     chat_completion = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
         model="llama-3.3-70b-versatile",
@@ -23,7 +22,6 @@ def get_video_script(title):
     return chat_completion.choices[0].message.content
 
 def download_bg_video():
-    # سحب فيديو خلفية تقني من Pexels
     url = "https://api.pexels.com/videos/search?query=technology&per_page=1"
     headers = {"Authorization": PEXELS_API_KEY}
     res = requests.get(url, headers=headers).json()
@@ -36,41 +34,43 @@ def create_reel(script_text):
     tts = gTTS(text=script_text, lang='en')
     tts.save("voice.mp3")
     
-    # 2. تجهيز الفيديو والمونتاج
-# تعديل بسيط لضمان التوافق
-    video_clip = VideoFileClip("bg_video.mp4").subclip(0, 15)
+    # 2. تجهيز الفيديو
+    video_clip = VideoFileClip("bg_video.mp4").subclip(0, 15).resize(width=1080)
+    audio_clip = AudioFileClip("voice.mp3")
     
-    # لو الفيديو أصلاً بالعرض، هنخليه بالطول للـ Reels
-    final_clip = video_clip.resize(width=1080) # هيظبط العرض والارتفاع هيتظبط تلقائي
-audio_clip = AudioFileClip("voice.mp3")
+    # 3. إضافة الشعار (Watermark)
+    watermark = TextClip("Trend Tech", fontsize=50, color='white', font='Arial-Bold')
+    watermark = watermark.set_pos(('center', 'bottom')).set_duration(15).set_opacity(0.5)
     
+    # 4. دمج كل شيء
     final_video = video_clip.set_audio(audio_clip)
-    final_video.write_videofile("trend_tech_reel.mp4", fps=24)
+    final_video = CompositeVideoClip([final_video, watermark])
+    
+    final_video.write_videofile("trend_tech_reel.mp4", fps=24, codec="libx264")
 
 def upload_to_fb_reels():
-    # رفع الفيديو لفيسبوك (بصيغة Reels)
     url = f"https://graph.facebook.com/v20.0/{FB_PAGE_ID}/videos"
     files = {'source': open('trend_tech_reel.mp4', 'rb')}
     data = {
-        'description': "Tech Update from Trend Tech! 🚀 #TrendTech #AI #TechNews",
+        'description': "Latest Tech Update! 🚀 #TrendTech #AI #Technology",
         'access_token': FB_PAGE_ACCESS_TOKEN
     }
     return requests.post(url, data=data, files=files).json()
 
 if __name__ == "__main__":
-    # تجربة على آخر خبر
-    feed = feedparser.parse("https://familytvr.blogspot.com/feeds/posts/default?alt=rss")
-    title = feed.entries[0].title
+    # سحب خبر من إحدى مدوناتك
+    feed_url = "https://familytvr.blogspot.com/feeds/posts/default?alt=rss"
+    feed = feedparser.parse(feed_url)
     
-    print("Generating Script with Groq...")
-    script = get_video_script(title)
-    
-    print("Downloading Background Video...")
-    download_bg_video()
-    
-    print("Creating Reel...")
-    create_reel(script)
-    
-    print("Uploading to Facebook...")
-    result = upload_to_fb_reels()
-    print(f"Final Result: {result}")
+    if feed.entries:
+        title = feed.entries[0].title
+        print(f"Processing: {title}")
+        
+        script = get_video_script(title)
+        download_bg_video()
+        create_reel(script)
+        
+        result = upload_to_fb_reels()
+        print(f"Final Result: {result}")
+    else:
+        print("No news found.")
