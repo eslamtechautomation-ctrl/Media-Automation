@@ -33,16 +33,23 @@ def save_memory(trend_title):
     with open(DB_FILE, "w") as f:
         json.dump(memory, f)
 
+from pytrends.request import TrendReq
+
 def get_google_trend():
-    # سحب التريندات اليومية من أمريكا (مصدر الـ Tech العالمي)
-    trends_url = "https://trends.google.com/trends/trendingsearches/daily/rss?geo=US"
-    feed = feedparser.parse(trends_url)
-    memory = load_memory()
-    
-    for entry in feed.entries:
-        if entry.title not in memory:
-            return entry.title
-    return None
+    try:
+        pytrends = TrendReq(hl='en-US', tz=360)
+        # سحب التريندات اليومية في أمريكا
+        df = pytrends.trending_searches(pn='united_states')
+        memory = load_memory()
+        
+        #df[0] هو العمود اللي فيه أسماء التريندات
+        for trend_name in df[0]:
+            if trend_name not in memory:
+                return trend_name
+        return None
+    except Exception as e:
+        print(f"Error fetching trends: {e}")
+        return None
 
 def get_deep_tech_script(trend_topic):
     # الـ Prompt الجديد: طلب تحليل عميق ومعلومة حقيقية
