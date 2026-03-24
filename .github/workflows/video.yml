@@ -2,7 +2,7 @@ name: Trend Tech Reels Creator (Smart Memory)
 
 on:
   schedule:
-    - cron: '0 */3 * * *' # هيشتغل كل 3 ساعات أوتوماتيك
+    - cron: '10 */1 * * *' # هيشتغل كل 3 ساعات أوتوماتيك
   workflow_dispatch: # زرار التشغيل اليدوي
 
 jobs:
