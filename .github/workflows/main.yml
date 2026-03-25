@@ -1,36 +1,36 @@
 name: Hourly Video Promo
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '0 * * * *' # تشغيل كل ساعة
   workflow_dispatch:
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-      - name: Install System Dependencies
+      - name: System Fixes
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg imagemagick
-          # تعديل صلاحيات ImageMagick للسماح بالكتابة (حل جذري لخطأ MoviePy)
+          # حل مشكلة صلاحيات ImageMagick اللي كانت بتفشل الكود
           sudo sed -i 's/policy domain="path" rights="none" pattern="@\*"/policy domain="path" rights="read|write" pattern="@\*"/g' /etc/ImageMagick-6/policy.xml
-      - name: Install Python Libraries
-        run: pip install -r requirements.txt
-      - name: Run Automation
+      - name: Install Libs
+        run: pip install groq gTTS moviepy==1.0.3 requests proglog
+      - name: Run
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
         run: python mega_automation.py
-      - name: Save Progress
+      - name: Update Pointer
         run: |
           git config --global user.name "Bot"
           git config --global user.email "bot@mail.com"
           git add app_pointer.json
-          git commit -m "update pointer" || exit 0
+          git commit -m "next app" || exit 0
           git push
