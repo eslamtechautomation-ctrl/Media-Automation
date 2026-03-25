@@ -1,7 +1,7 @@
 name: Hourly Video Promo
 on:
   schedule:
-    - cron: '0 * * * *' # تشغيل كل ساعة
+    - cron: '0 * * * *'
   workflow_dispatch:
 jobs:
   build:
@@ -16,10 +16,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg imagemagick
-          # حل مشكلة صلاحيات ImageMagick اللي كانت بتفشل الكود
           sudo sed -i 's/policy domain="path" rights="none" pattern="@\*"/policy domain="path" rights="read|write" pattern="@\*"/g' /etc/ImageMagick-6/policy.xml
       - name: Install Libs
-        run: pip install groq gTTS moviepy==1.0.3 requests proglog
+        run: |
+          pip install --upgrade pip
+          pip install --upgrade Pillow
+          pip install groq gTTS moviepy==1.0.3 requests proglog
       - name: Run
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
