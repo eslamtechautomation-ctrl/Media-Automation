@@ -8,20 +8,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Setup Python
+      - name: Setup
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-      - name: System Fixes
+      - name: Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg imagemagick
+          sudo apt-get update && sudo apt-get install -y ffmpeg imagemagick
           sudo sed -i 's/policy domain="path" rights="none" pattern="@\*"/policy domain="path" rights="read|write" pattern="@\*"/g' /etc/ImageMagick-6/policy.xml
-      - name: Install Libs
-        run: |
           pip install --upgrade pip
-          pip install --upgrade Pillow
-          pip install groq gTTS moviepy==1.0.3 requests proglog
+          pip install Pillow groq gTTS requests moviepy==1.0.3 proglog
       - name: Run
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -29,10 +25,10 @@ jobs:
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
         run: python mega_automation.py
-      - name: Update Pointer
+      - name: Save
         run: |
           git config --global user.name "Bot"
           git config --global user.email "bot@mail.com"
           git add app_pointer.json
-          git commit -m "next app" || exit 0
+          git commit -m "update" || exit 0
           git push
