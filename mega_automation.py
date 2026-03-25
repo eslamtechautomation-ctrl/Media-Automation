@@ -1,16 +1,15 @@
-import os, requests, json, re, random
+import os, requests, json, re
 from groq import Groq
 from gtts import gTTS
 from moviepy.editor import VideoFileClip, AudioFileClip, TextClip, CompositeVideoClip
-import proglog
 import PIL.Image
 
-# حل مشكلة ANTIALIAS في النسخ الجديدة من Pillow
+# حل مشكلة Pillow الجديدة
 if not hasattr(PIL.Image, 'ANTIALIAS'):
     PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
 
-# كتم اللوجات لمنع تداخل العمليات
-proglog.default_bar_logger = lambda *args, **kwargs: None
+# كتم أي تسجيل عمليات قد يسبب فشل الأكشن
+os.environ["PROGLOG_DISABLE_BAR"] = "True"
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
@@ -19,7 +18,7 @@ FB_PAGE_ACCESS_TOKEN = os.environ.get("FB_PAGE_ACCESS_TOKEN")
 
 client = Groq(api_key=GROQ_API_KEY)
 
-# قائمة تطبيقاتك الـ 20
+# قائمة تطبيقاتك
 APPS = [
     {"name": "Smart IPTV Player", "url": "https://play.google.com/store/apps/details?id=asd.iptvplayer"},
     {"name": "Injury Lawyer Guide", "url": "https://play.google.com/store/apps/details?id=injurylawyerguide.aplizrc"},
@@ -56,42 +55,38 @@ def get_next_app():
     return APPS[idx]
 
 def get_content(app):
-    """معالجة الـ KeyError بذكاء"""
-    prompt = f"Return ONLY JSON: {{\"post\": \"viral post for {app['name']}\", \"script\": \"10 sec script\"}}"
+    """تجنب الـ KeyError نهائياً"""
+    prompt = f"Return ONLY JSON: {{\"post\": \"post text for {app['name']}\", \"script\": \"video script\"}}"
     try:
         res = client.chat.completions.create(messages=[{"role": "user", "content": prompt}], model="llama-3.3-70b-versatile")
-        match = re.search(r'\{.*\}', res.choices[0].message.content, re.DOTALL)
-        if match:
-            data = json.loads(match.group())
-            p = data.get('post') or data.get('facebook_post') or f"Get {app['name']} now!"
-            s = data.get('script') or data.get('video_script') or f"Check out {app['name']}."
-            return {"post": p, "script": s}
-    except: pass
-    return {"post": f"Top App: {app['name']}", "script": f"Download {app['name']} today."}
+        data = json.loads(re.search(r'\{.*\}', res.choices[0].message.content, re.DOTALL).group())
+        return {
+            "post": data.get('post', data.get('facebook_post', f"Check {app['name']}")),
+            "script": data.get('script', data.get('video_script', f"Download {app['name']}"))
+        }
+    except:
+        return {"post": f"Amazing app: {app['name']}", "script": f"Try {app['name']} today."}
 
 def make_video(app_name, script):
-    """حل مشكلة المونتاج والنصوص"""
-    headers = {"Authorization": PEXELS_API_KEY}
-    v_data = requests.get("https://api.pexels.com/videos/search?query=technology&per_page=1", headers=headers).json()
-    v_url = v_data['videos'][0]['video_files'][0]['link']
+    """إنتاج الفيديو بدون Logger"""
+    v_url = requests.get(f"https://api.pexels.com/videos/search?query=tech&per_page=1", headers={"Authorization": PEXELS_API_KEY}).json()['videos'][0]['video_files'][0]['link']
     with open("v.mp4", "wb") as f: f.write(requests.get(v_url).content)
     
     gTTS(text=script, lang='en').save("a.mp3")
     audio = AudioFileClip("a.mp3")
-    
-    # كروب للفيديو ليكون طولي (9:16)
-    clip = VideoFileClip("v.mp4").subclip(0, min(audio.duration, 12)).resize(height=1920).crop(x_center=540, width=1080)
+    clip = VideoFileClip("v.mp4").subclip(0, min(audio.duration, 10)).resize(height=1920).crop(x_center=540, width=1080)
     
     try:
-        txt = TextClip(app_name.upper(), fontsize=70, color='yellow', font='Arial-Bold', bg_color='black', size=(900, 250)).set_position('center').set_duration(audio.duration)
+        txt = TextClip(app_name.upper(), fontsize=60, color='white', font='Arial-Bold', bg_color='blue', size=(800, 200)).set_position('center').set_duration(audio.duration)
         final = CompositeVideoClip([clip, txt]).set_audio(audio)
     except:
         final = clip.set_audio(audio)
-        
-    final.write_videofile("out.mp4", fps=24, codec="libx264", audio_codec="aac", threads=2)
-    return "out.mp4"
+    
+    # استخدام logger=None هو السر في حل مشكلة 'NoneType' object is not callable
+    final.write_videofile("promo.mp4", fps=24, codec="libx264", audio_codec="aac", logger=None)
+    return "promo.mp4"
 
-def upload_fb(path, msg):
+def upload(path, msg):
     url = f"https://graph.facebook.com/v20.0/{FB_PAGE_ID}/videos"
     with open(path, 'rb') as f:
         return requests.post(url, data={'description': msg, 'access_token': FB_PAGE_ACCESS_TOKEN}, files={'source': f}).json()
@@ -99,6 +94,5 @@ def upload_fb(path, msg):
 if __name__ == "__main__":
     app = get_next_app()
     info = get_content(app)
-    video = make_video(app['name'], info['script'])
-    result = upload_fb(video, f"{info['post']}\n\n📥 {app['url']}")
-    print(result)
+    v_path = make_video(app['name'], info['script'])
+    print(upload(v_path, f"{info['post']}\n\n📥 {app['url']}"))
